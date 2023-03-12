@@ -5,3 +5,4 @@ int printf(char *format, ...);
 void warn(char *format, ...);
 
 int stdio_init();
+int PRINTF(char* text);
