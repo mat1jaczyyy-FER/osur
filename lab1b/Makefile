@@ -8,12 +8,18 @@ MOD_O=$(foreach i,$(subst /.,,$(FOLDERS)),$i/mod-$i.o)
 
 all: $(ELF)
 
-%.elf: %.o
-	for dir in $(FOLDERS); do $(MAKE) -C $$dir; done
-	gcc $^ $(MOD_O) -o $@
+%.elf: %.o $(MOD_O)
+	gcc $^ -o $@
 
 %.o: %.c
 	gcc -c $< -o $@
+
+.PHONY: FORCE
+
+mod-%.o: FORCE
+	$(MAKE) -C $(word 1,$(subst /, , $@))
+
+FORCE: ;
 
 pokreni: $(ELF)
 	./$<
