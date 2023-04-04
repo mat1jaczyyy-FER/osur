@@ -5,29 +5,58 @@
 ENTRY(arch_startup)
 
 SECTIONS {
-	.code LOAD_ADDR :
+	.bootcode LOAD_ADDR:
 	{
 		kernel_code_addr = .;
 
 		/* instructions */
 		*?/boot/startup.asm.o ( .text* )
 
+		*?/boot/premjesti.o ( .text* )
+	}
+	size_bootcode = SIZEOF(.bootcode);
+
+	.code CODE_ADDR: AT(LOAD_ADDR + SIZEOF(.bootcode))
+	{
 		*( .text* )
 	}
-	.data :
+	size_code = SIZEOF(.code);
+
+	xxxx = 0x20000;
+
+	.rodata RODATA_ADDR: AT(LOAD_ADDR + SIZEOF(.bootcode) + SIZEOF(.code))
+	{
+		kernel_rodata_addr = .;
+
+		/* read only data (constants) */
+		* ( .rodata* )
+	}
+	size_rodata = SIZEOF(.rodata);
+
+	.data DATA_ADDR: AT(LOAD_ADDR + SIZEOF(.bootcode) + SIZEOF(.code) + SIZEOF(.rodata))
 	{
 		kernel_data_addr = .;
 
-		/* read only data (constants), initialized global variables */
-		* ( .rodata* .data* )
+		/* initialized global variables */
+		* ( .data* )
 	}
-	.bss :
+	size_data = SIZEOF(.data);
+
+	.bss : AT(LOAD_ADDR + SIZEOF(.bootcode) + SIZEOF(.code) + SIZEOF(.rodata) + SIZEOF(.data))
 	{
 		*( .bss* COMMON* )
+		. = ALIGN (4096);
+	}
+	size_bss = SIZEOF(.bss);
 
+	.stog_u_slici STACK_ADDR:
+	{
+		* ( .stog* )
 		. = ALIGN (4096);
 	}
 
+	/DISCARD/ : { *(.eh_frame) }
+	
 	/*
 	 * what with other sections generated with gcc (various versions)?
 	 * if optimizing for size discard them with: /DISCARD/ : { *(*) }
