@@ -52,6 +52,64 @@ void *ffs_init(void *mem_segm, size_t size)
 	return mpool;
 }
 
+void print_mpool(ffs_mpool_t *mpool) {
+	for (ffs_hdr_t* a = mpool->first; a != NULL; a = a->next)
+	{
+		LOG(INFO, "mpool %x", a);
+	}
+}
+
+int ffs_expand_chunk(ffs_mpool_t *mpool, ffs_hdr_t *chunk, size_t size) {
+	// found adequate free chunk?
+	if (chunk->size >= size) return 1;
+
+	// try expanding this one to the left
+	ffs_hdr_t *before = ((void *) chunk) - sizeof(size_t);
+	int before_free = CHECK_FREE(before);
+
+	if (before_free)
+	{
+		before = GET_HDR(before);
+		ffs_remove_chunk(mpool, before);
+		ffs_remove_chunk(mpool, chunk);
+
+		before->size += chunk->size; /* join */
+		chunk = before;
+		
+		ffs_insert_chunk(mpool, chunk);
+
+		// left expansion helped?
+		if (chunk->size >= size) return 1;
+	}
+
+	// try expanding this one to the right
+	ffs_hdr_t *after = GET_AFTER(chunk);
+	int after_free = CHECK_FREE(after);
+
+	if (after_free)
+	{
+		ffs_remove_chunk(mpool, after);
+		ffs_remove_chunk(mpool, chunk);
+
+		chunk->size += after->size; /* join */
+
+		ffs_insert_chunk(mpool, chunk);
+
+		// right expansion helped?
+		if (chunk->size >= size) return 1;
+	}
+
+	// we had an expansion, but it wasn't enough, try again
+	if (before_free || after_free)
+	{
+		ffs_expand_chunk(mpool, chunk, size);
+		return 1;
+	}
+
+	// can't expand anymore...
+	return 0;
+}
+
 /*!
  * Get free chunk with required size (or slightly bigger)
  * \param mpool Memory pool to be used (if NULL default pool is used)
@@ -60,6 +118,7 @@ void *ffs_init(void *mem_segm, size_t size)
  */
 void *ffs_alloc(ffs_mpool_t *mpool, size_t size)
 {
+	LOG(INFO, "ffs_alloc called with size %x", size);
 	ffs_hdr_t *iter, *chunk;
 
 	ASSERT(mpool);
@@ -72,8 +131,10 @@ void *ffs_alloc(ffs_mpool_t *mpool, size_t size)
 	ALIGN_FW(size);
 
 	iter = mpool->first;
-	while (iter != NULL && iter->size < size)
+	while (iter != NULL) {
+		if (ffs_expand_chunk(mpool, iter, size)) break;
 		iter = iter->next;
+	}
 
 	if (iter == NULL)
 		return NULL; /* no adequate free chunk found */
@@ -97,6 +158,8 @@ void *ffs_alloc(ffs_mpool_t *mpool, size_t size)
 
 	MARK_USED(chunk);
 	CLONE_SIZE_TO_TAIL(chunk);
+	
+	print_mpool(mpool);
 
 	return ((void *) chunk) + sizeof(size_t);
 }
@@ -109,6 +172,7 @@ void *ffs_alloc(ffs_mpool_t *mpool, size_t size)
  */
 int ffs_free(ffs_mpool_t *mpool, void *chunk_to_be_freed)
 {
+	LOG(INFO, "ffs_free called for %x", chunk_to_be_freed);
 	ffs_hdr_t *chunk, *before, *after;
 
 	ASSERT(mpool && chunk_to_be_freed);
@@ -116,24 +180,33 @@ int ffs_free(ffs_mpool_t *mpool, void *chunk_to_be_freed)
 	chunk = chunk_to_be_freed - sizeof(size_t);
 	ASSERT(CHECK_USED(chunk));
 
-	MARK_FREE(chunk); /* mark it as free */
-
-	/* join with left? */
-	before = ((void *) chunk) - sizeof(size_t);
-	if (CHECK_FREE(before))
-	{
-		before = GET_HDR(before);
-		ffs_remove_chunk(mpool, before);
-		before->size += chunk->size; /* join */
-		chunk = before;
+	int count = 0;
+	ffs_hdr_t *iter = mpool->first;
+	while (iter != NULL) {
+		count++;
+		iter = iter->next;
 	}
 
-	/* join with right? */
-	after = GET_AFTER(chunk);
-	if (CHECK_FREE(after))
-	{
-		ffs_remove_chunk(mpool, after);
-		chunk->size += after->size; /* join */
+	MARK_FREE(chunk); /* mark it as free */
+
+	if (count > 5) {
+		/* join with left? */
+		before = ((void *) chunk) - sizeof(size_t);
+		if (CHECK_FREE(before))
+		{
+			before = GET_HDR(before);
+			ffs_remove_chunk(mpool, before);
+			before->size += chunk->size; /* join */
+			chunk = before;
+		}
+
+		/* join with right? */
+		after = GET_AFTER(chunk);
+		if (CHECK_FREE(after))
+		{
+			ffs_remove_chunk(mpool, after);
+			chunk->size += after->size; /* join */
+		}
 	}
 
 	/* insert chunk in free list */
@@ -141,6 +214,8 @@ int ffs_free(ffs_mpool_t *mpool, void *chunk_to_be_freed)
 
 	/* set chunk tail */
 	CLONE_SIZE_TO_TAIL(chunk);
+
+	print_mpool(mpool);
 
 	return 0;
 }
