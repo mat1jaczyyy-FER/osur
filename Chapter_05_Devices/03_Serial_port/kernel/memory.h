@@ -13,6 +13,7 @@
 #define	K_MEM_INIT(segment, size)	ffs_init(segment, size)
 #define	KMALLOC(size)			ffs_alloc(k_mpool, size)
 #define	KFREE(addr)			ffs_free(k_mpool, addr)
+#define KFRAG()			ffs_frag(k_mpool)
 
 #elif MEM_ALLOCATOR == GMA
 

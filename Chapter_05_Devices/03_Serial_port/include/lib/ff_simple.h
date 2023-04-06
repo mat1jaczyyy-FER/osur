@@ -19,6 +19,7 @@ typedef void ffs_mpool_t;
 void *ffs_init(void *mem_segm, size_t size);
 void *ffs_alloc(ffs_mpool_t *mpool, size_t size);
 int ffs_free(ffs_mpool_t *mpool, void *chunk_to_be_freed);
+float ffs_frag(ffs_mpool_t *mpool);
 
 /*! rest is only for first_fit.c */
 #else /* _FF_SIMPLE_C_ */
@@ -77,6 +78,7 @@ ffs_mpool_t;
 void *ffs_init(void *mem_segm, size_t size);
 void *ffs_alloc(ffs_mpool_t *mpool, size_t size);
 int ffs_free(ffs_mpool_t *mpool, void *chunk_to_be_freed);
+float ffs_frag(ffs_mpool_t *mpool);
 
 static void ffs_remove_chunk(ffs_mpool_t *mpool, ffs_hdr_t *chunk);
 static void ffs_insert_chunk(ffs_mpool_t *mpool, ffs_hdr_t *chunk);

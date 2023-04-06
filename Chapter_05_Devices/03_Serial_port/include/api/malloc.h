@@ -5,3 +5,4 @@
 
 #define	malloc			kmalloc
 #define	free			kfree
+#define frag            kfrag

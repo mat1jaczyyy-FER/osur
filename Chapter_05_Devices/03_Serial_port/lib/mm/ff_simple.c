@@ -53,6 +53,7 @@ void *ffs_init(void *mem_segm, size_t size)
 }
 
 void print_mpool(ffs_mpool_t *mpool) {
+	return;
 	for (ffs_hdr_t* a = mpool->first; a != NULL; a = a->next)
 	{
 		LOG(INFO, "mpool %x", a);
@@ -118,7 +119,7 @@ int ffs_expand_chunk(ffs_mpool_t *mpool, ffs_hdr_t *chunk, size_t size) {
  */
 void *ffs_alloc(ffs_mpool_t *mpool, size_t size)
 {
-	LOG(INFO, "ffs_alloc called with size %x", size);
+	//LOG(INFO, "ffs_alloc called with size %x", size);
 	ffs_hdr_t *iter, *chunk;
 
 	ASSERT(mpool);
@@ -172,7 +173,7 @@ void *ffs_alloc(ffs_mpool_t *mpool, size_t size)
  */
 int ffs_free(ffs_mpool_t *mpool, void *chunk_to_be_freed)
 {
-	LOG(INFO, "ffs_free called for %x", chunk_to_be_freed);
+	//LOG(INFO, "ffs_free called for %x", chunk_to_be_freed);
 	ffs_hdr_t *chunk, *before, *after;
 
 	ASSERT(mpool && chunk_to_be_freed);
@@ -218,6 +219,28 @@ int ffs_free(ffs_mpool_t *mpool, void *chunk_to_be_freed)
 	print_mpool(mpool);
 
 	return 0;
+}
+
+/*!
+ * Get level of fragmentation
+ * \param mpool Memory pool to be used (if NULL default pool is used)
+ * \return (UKslobodno - MAXslobodni)/UKslobodno
+ */
+float ffs_frag(ffs_mpool_t *mpool)
+{
+	int UKslobodno = 0;
+	int MAXslobodni = 0;
+
+	for (ffs_hdr_t *iter = mpool->first; iter != NULL; iter = iter->next) {
+		if (CHECK_FREE(iter)) {
+			UKslobodno += iter->size;
+
+			if (iter->size > MAXslobodni)
+				MAXslobodni = iter->size;
+		}
+	}
+
+	return (float) (UKslobodno - MAXslobodni) / UKslobodno;
 }
 
 /*!
