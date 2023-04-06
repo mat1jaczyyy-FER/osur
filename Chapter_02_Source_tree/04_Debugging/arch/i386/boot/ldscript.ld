@@ -5,35 +5,23 @@
 ENTRY(arch_startup)
 
 SECTIONS {
-	.bootcode LOAD_ADDR:
+	.code LOAD_ADDR:
 	{
 		kernel_code_addr = .;
 
 		/* instructions */
-		*?/boot/startup.asm.o ( .text* )
-
-		*?/boot/premjesti.o ( .text* )
+		* ( .text* )
 	}
-	size_bootcode = SIZEOF(.bootcode);
 
-	.code CODE_ADDR: AT(LOAD_ADDR + SIZEOF(.bootcode))
-	{
-		*( .text* )
-	}
-	size_code = SIZEOF(.code);
-
-	xxxx = 0x20000;
-
-	.rodata RODATA_ADDR: AT(LOAD_ADDR + SIZEOF(.bootcode) + SIZEOF(.code))
+	.rodata :
 	{
 		kernel_rodata_addr = .;
 
 		/* read only data (constants) */
 		* ( .rodata* )
 	}
-	size_rodata = SIZEOF(.rodata);
 
-	.data DATA_ADDR: AT(LOAD_ADDR + SIZEOF(.bootcode) + SIZEOF(.code) + SIZEOF(.rodata))
+	.data DATA_ADDR:
 	{
 		kernel_data_addr = .;
 
@@ -42,7 +30,7 @@ SECTIONS {
 	}
 	size_data = SIZEOF(.data);
 
-	.bss : AT(LOAD_ADDR + SIZEOF(.bootcode) + SIZEOF(.code) + SIZEOF(.rodata) + SIZEOF(.data))
+	.bss :
 	{
 		*( .bss* COMMON* )
 		. = ALIGN (4096);
