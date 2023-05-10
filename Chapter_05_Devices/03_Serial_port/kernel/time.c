@@ -20,6 +20,8 @@ static void ktimer_schedule();
 static list_t ktimers;
 
 static timespec_t threshold;
+static timespec_t realtime_start;
+static timespec_t realtime_seton;
 
 /* timer for sleep + return value */
 static ktimer_t *sleep_timer;
@@ -40,11 +42,27 @@ int k_time_init()
 		threshold.tv_nsec += 500000000L; /* + half second */
 	threshold.tv_sec /= 2;
 
+	realtime_start.tv_sec = 0;
+	realtime_start.tv_nsec = 0;
+
+	realtime_seton.tv_sec = 0;
+	realtime_seton.tv_nsec = 0;
+
 	sleep_timer = NULL;
 	sleep_retval = EXIT_SUCCESS;
 	wake_up = FALSE;
 
 	return EXIT_SUCCESS;
+}
+
+void monotonic_to_realtime(timespec_t *time) {
+	time_sub(time, &realtime_seton);
+	time_add(time, &realtime_start);
+}
+
+void realtime_to_monotonic(timespec_t *time) {
+	time_sub(time, &realtime_start);
+	time_add(time, &realtime_seton);
 }
 
 /*!
@@ -58,6 +76,9 @@ int kclock_gettime(clockid_t clockid, timespec_t *time)
 
 	arch_get_time(time);
 
+	if (clockid == CLOCK_REALTIME)
+		monotonic_to_realtime(time);
+
 	return EXIT_SUCCESS;
 }
 
@@ -68,9 +89,12 @@ int kclock_gettime(clockid_t clockid, timespec_t *time)
  */
 int kclock_settime(clockid_t clockid, timespec_t *time)
 {
-	ASSERT(time && (clockid==CLOCK_REALTIME || clockid==CLOCK_MONOTONIC));
+	ASSERT(time && (clockid==CLOCK_REALTIME));
 
-	arch_set_time(time);
+	arch_get_time(&realtime_seton);
+	realtime_start = *time;
+
+	ktimer_schedule();
 
 	return EXIT_SUCCESS;
 }
@@ -141,8 +165,16 @@ void kclock_interrupt_sleep(void *source)
 static int ktimer_cmp(void *_a, void *_b)
 {
 	ktimer_t *a = _a, *b = _b;
+	timespec_t ta = a->itimer.it_value;
+	timespec_t tb = b->itimer.it_value;
 
-	return time_cmp(&a->itimer.it_value, &b->itimer.it_value);
+	if (a->clockid == CLOCK_REALTIME)
+		realtime_to_monotonic(&ta);
+
+	if (b->clockid == CLOCK_REALTIME)
+		realtime_to_monotonic(&tb);
+
+	return time_cmp(&ta, &tb);
 }
 
 /*!
@@ -277,24 +309,36 @@ int ktimer_gettime(ktimer_t *ktimer, itimerspec_t *value)
 static void ktimer_schedule()
 {
 	ktimer_t *first, *next;
-	timespec_t time, ref_time;
+	timespec_t realtime, ref_realtime, monotonic, ref_monotonic;
 
 	if (!sys__feature(FEATURE_TIMERS, FEATURE_GET, 0))
 		return;
 
-	kclock_gettime(CLOCK_REALTIME, &time);
-	/* should have separate "scheduler" for each clock */
+	list_sort(&ktimers, ktimer_cmp);
 
-	ref_time = time;
-	time_add(&ref_time, &threshold);
+	kclock_gettime(CLOCK_REALTIME, &realtime);
+	ref_realtime = realtime;
+	time_add(&ref_realtime, &threshold);
+
+	kclock_gettime(CLOCK_MONOTONIC, &monotonic);
+	ref_monotonic = monotonic;
+	time_add(&ref_monotonic, &threshold);
+
 	/* use "ref_time" instead of "time" when looking timers to activate */
 
 	/* should any timer be activated? */
 	first = list_get(&ktimers, FIRST);
 	while (first != NULL)
 	{
+		timespec_t *ref_time;
+		
+		if (first->clockid == CLOCK_REALTIME)
+			ref_time = &ref_realtime;
+		else if (first->clockid == CLOCK_MONOTONIC)
+			ref_time = &ref_monotonic;
+
 		/* timers have absolute values in 'it_value' */
-		if (time_cmp(&first->itimer.it_value, &ref_time) <= 0)
+		if (time_cmp(&first->itimer.it_value, ref_time) <= 0)
 		{
 			/* 'activate' timer */
 
@@ -324,18 +368,30 @@ static void ktimer_schedule()
 			next = list_get(&ktimers, FIRST);
 			if (next != NULL)
 			{
-				ref_time = next->itimer.it_value;
-				time_sub(&ref_time, &time);
-				arch_timer_set(&ref_time, ktimer_schedule);
+				*ref_time = next->itimer.it_value;
+
+				timespec_t *time;
+
+				if (next->clockid == CLOCK_REALTIME)
+					time = &realtime;
+				else if (next->clockid == CLOCK_MONOTONIC)
+					time = &monotonic;
+
+				time_sub(ref_time, time);
+				arch_timer_set(ref_time, ktimer_schedule);
 			}
 			/* evade this behaviour! */
 
 			ktimer_process_event(&first->evp);
 
 			/* processing may take some time! refresh "time" */
-			kclock_gettime(CLOCK_REALTIME, &time);
-			ref_time = time;
-			time_add(&ref_time, &threshold);
+			kclock_gettime(CLOCK_REALTIME, &realtime);
+			ref_realtime = realtime;
+			time_add(&ref_realtime, &threshold);
+
+			kclock_gettime(CLOCK_MONOTONIC, &monotonic);
+			ref_monotonic = monotonic;
+			time_add(&ref_monotonic, &threshold);
 
 			first = list_get(&ktimers, FIRST);
 		}
@@ -343,9 +399,17 @@ static void ktimer_schedule()
 			first = list_get(&ktimers, FIRST);
 			if (first)
 			{
-				ref_time = first->itimer.it_value;
-				time_sub(&ref_time, &time);
-				arch_timer_set(&ref_time, ktimer_schedule);
+				*ref_time = first->itimer.it_value;
+
+				timespec_t *time;
+
+				if (first->clockid == CLOCK_REALTIME)
+					time = &realtime;
+				else if (first->clockid == CLOCK_MONOTONIC)
+					time = &monotonic;
+
+				time_sub(ref_time, time);
+				arch_timer_set(ref_time, ktimer_schedule);
 			}
 			break;
 		}
@@ -423,7 +487,7 @@ int sys__clock_settime(clockid_t clockid, timespec_t *time)
 	SYS_ENTRY();
 
 	ASSERT_ERRNO_AND_EXIT(
-		time && (clockid==CLOCK_REALTIME || clockid==CLOCK_MONOTONIC),
+		time && (clockid==CLOCK_REALTIME),
 		EINVAL
 	);
 

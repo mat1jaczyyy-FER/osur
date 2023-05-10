@@ -79,6 +79,9 @@ void list_append(list_t *list, void *object, list_h *hdr);
 /*! Add element to list, add to head - as first element */
 void list_prepend(list_t *list, void *object, list_h *hdr);
 
+/*! Sort list */
+void list_sort(list_t *list, int(*cmp)(void *, void *));
+
 /*! Add element to sorted list */
 void list_sort_add(list_t *list, void *object, list_h *hdr,
 				   int(*cmp)(void *, void *));

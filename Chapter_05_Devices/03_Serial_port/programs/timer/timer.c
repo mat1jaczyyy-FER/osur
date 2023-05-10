@@ -52,10 +52,26 @@ int timer()
 	t2.it_value.tv_sec = 5;
 	t2.it_value.tv_nsec = 0;
 	evp.sigev_value.sival_int = t2.it_interval.tv_sec;
-	timer_create(CLOCK_REALTIME, &evp, &timer2);
+	timer_create(CLOCK_MONOTONIC, &evp, &timer2);
 	timer_settime(&timer2, 0, &t2, NULL);
 
-	t.tv_sec = 26;
+	t.tv_sec = 11;
+	t.tv_nsec = 0;
+
+	while (TIME_IS_SET(&t))
+		if (clock_nanosleep(CLOCK_REALTIME, 0, &t, &t))
+			printf("Interrupted sleep?\n");
+
+	clock_gettime(CLOCK_REALTIME, &t);
+	printf("System time: %d:%d\n", t.tv_sec, t.tv_nsec / 100000000);
+
+	t.tv_sec = 3;
+	t.tv_nsec = 0;
+	clock_settime(CLOCK_REALTIME, &t);
+	clock_gettime(CLOCK_REALTIME, &t);
+	printf("System time: %d:%d\n", t.tv_sec, t.tv_nsec / 100000000);
+
+	t.tv_sec = 11;
 	t.tv_nsec = 0;
 
 	while (TIME_IS_SET(&t))

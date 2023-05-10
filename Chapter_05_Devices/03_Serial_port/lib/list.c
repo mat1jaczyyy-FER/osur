@@ -58,6 +58,31 @@ void list_prepend(list_t *list, void *object, list_h *hdr)
 	list->first = hdr;
 }
 
+void list_sort(list_t *list, int(*cmp)(void *, void *))
+{
+	ASSERT(list);
+
+	list_h *hdr = list->first;
+
+	if (!hdr) return;
+	
+	if (hdr->prev)
+		hdr->prev->next = hdr->next;
+
+	if (hdr->next)
+		hdr->next->prev = hdr->prev;
+
+	if (list->first == hdr)
+		list->first = hdr->next;
+
+	if (list->last == hdr)
+		list->last = hdr->prev;
+
+	list_sort(list, cmp);
+
+	list_sort_add(list, hdr->object, hdr, cmp);
+}
+
 /*! Add element to sorted list */
 void list_sort_add(list_t *list, void *object, list_h *hdr,
 				   int(*cmp)(void *, void *))

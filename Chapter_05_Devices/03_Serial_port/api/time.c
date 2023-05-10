@@ -30,8 +30,7 @@ int clock_gettime(clockid_t clockid, timespec_t *time)
  */
 int clock_settime(clockid_t clockid, timespec_t *time)
 {
-	ASSERT_ERRNO_AND_RETURN(time && (clockid == CLOCK_REALTIME ||
-				  clockid == CLOCK_MONOTONIC), EINVAL      );
+	ASSERT_ERRNO_AND_RETURN(time && (clockid == CLOCK_REALTIME), EINVAL      );
 
 	return sys__clock_settime(clockid, time);
 }
