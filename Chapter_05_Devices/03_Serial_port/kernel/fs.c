@@ -10,6 +10,9 @@
 #include "time.h"
 #include "memory.h"
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 static kdevice_t *disk;
 #define DISK_WRITE(buffer, blocks, first_block) \
 k_device_send(buffer, (first_block << 16) | blocks, 0, disk);
@@ -185,59 +188,67 @@ int k_fs_read_write(descriptor_t *desc, void *buffer, size_t size, int op)
 	if ((op && (fd->flags & O_WRONLY)) || (!op && (fd->flags & O_RDONLY)))
 		return -EPERM;
 
+	uint8 buf[ft->block_size];
+	size_t todo = size;
+
 	if (op) {
-		//read from offset "fd->fp" to "buffer" "size" bytes
+		size_t from_buf = fd->fp % ft->block_size;
+		size_t to_buffer = 0;
+		todo = MIN(fd->tfd->size - fd->fp, todo);
+		size_t sz = MIN(ft->block_size - from_buf, todo);
 
-		// possible scenarios: (#=block boundary)
-		// fp % block_size == 0
-		// #|fp|-----------#-----------#
-		//     | size |
+		while (todo > 0 && fd->fp < fd->tfd->size) {
+			DISK_READ(buf, 1, fd->tfd->block[fd->fp / ft->block_size]);
+			memcpy(buffer + to_buffer, buf + from_buf, sz);
+			to_buffer += sz;
+			from_buf = 0;
+			todo -= sz;
+			fd->fp += sz;
+			sz = MIN(ft->block_size, todo);
+		}
 
-		// fp % block_size == 0
-		// #|fp|-----------#-----------#
-		//     |      size     |
-
-		// fp % block_size > 0
-		// #----|fp|-------#-----------#
-		//         |size|
-
-		// fp % block_size > 0
-		// #----|fp|-------#-----------#
-		//         |    size    |
-
-		//start with block x where address fd->fp is (x=fp/bsize)
-		//fd->tfd->block[x] has address of block on disk
-		//read that block and copy data from fd->fp to the end of block
-		//DISK_READ(buf, 1, fd->tfd->block[x]);
-		//which part of buf to buffer? ...
-		//read next block ...
-		//stop when all required data is read or end of the file is reached
-
-		//update "ta", fp
-		//return number of bytes read
-
-		//char buf[ft->block_size];
-		size_t todo = size;
-		//size_t block = fd->fp / ft->block_size;
-
-		//todo
+		timespec_t t;
+		kclock_gettime (CLOCK_REALTIME, &t);
+		fd->tfd->ta = t;
 
 		return size - todo;
 	}
 	else {
-		//assume there is enough space on disk
+		size_t to_buf = fd->fp % ft->block_size;
+		size_t from_buffer = 0;
+		size_t sz = MIN(ft->block_size - to_buf, todo);
 
-		//write ...
-		//if ...->block[x] == 0 => find free block on disk
-		//when fp isn't block start, read block from disk first
-		//and then replace fp+ bytes ... and then write block back
+		while (todo > 0) {
+			size_t nb = fd->fp / ft->block_size;
+			if (nb >= fd->tfd->blocks) {
+				for (int i = ft_size; i < ft->blocks; i++) {
+					if (ft->free[i]) {
+						ft->free[i] = 0;
+						fd->tfd->block[nb] = i;
+						fd->tfd->blocks++;
+						break;
+					}
+				}
+				if (nb >= fd->tfd->blocks)
+					break;
+			}
+			DISK_READ(buf, 1, fd->tfd->block[nb]);
+			memcpy(buf + to_buf, buffer + from_buffer, sz);
+			DISK_WRITE(buf, 1, fd->tfd->block[nb]);
+			to_buf = 0;
+			from_buffer += sz;
+			todo -= sz;
+			fd->fp += sz;
+			sz = MIN(ft->block_size, todo);
+		}
 
-		//char buf[ft->block_size];
-		size_t todo = size;
-		//size_t block = fd->fp / ft->block_size;
-		//size_t maxfilesize = ft->block_size * MAXFILEBLOCKS;
+		fd->tfd->size = MAX(fd->tfd->size, fd->fp);
 
-		//todo
+		timespec_t t;
+		kclock_gettime (CLOCK_REALTIME, &t);
+		fd->tfd->tm = t;
+
+		DISK_WRITE(ft, ft_size, 0);
 
 		return size - todo;
 	}
