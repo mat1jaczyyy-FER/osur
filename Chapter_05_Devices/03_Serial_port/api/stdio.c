@@ -107,6 +107,28 @@ ssize_t write(int fd, void *buffer, size_t count)
 	return sys__write(&std_desc[fd], buffer, count);
 }
 
+int wipe(char *pathname) {
+	int fd = open(pathname, O_RDONLY, 0);
+	if (fd < 0) return 0;
+
+	char buf[1];
+	int s;
+	for (s = 0; read(fd, buf, 1) > 0; s++);
+
+	if (s == 0) return 0;
+
+	close(fd);
+
+	fd = open(pathname, O_WRONLY, 0);
+
+	for (int i = 0; i < s; i++)
+		write(fd, "x", 1);
+	
+	close(fd);
+
+	return s;
+}
+
 /*! Get input from "standard input" */
 int getchar()
 {

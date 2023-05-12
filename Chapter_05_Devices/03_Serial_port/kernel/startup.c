@@ -66,16 +66,15 @@ void k_startup()
 	retval = close(fd);
 	kprintf("retval=%d\n", retval);
 
+	retval = wipe("file:test");
+	kprintf("wipe_retval=%d\n", retval);
+
 	fd = open("file:test", O_RDONLY, 0);
 	kprintf("fd=%d\n", fd);
 	char buff[11];
 	retval = read(fd, buff, 11);
 	kprintf("retval=%d\n", retval);
 	kprintf("buff=%s\n", buff);
-
-
-	/* start desired program(s) */
-	fs_test();
 
 	kprintf("\nSystem halted!\n");
 	halt();

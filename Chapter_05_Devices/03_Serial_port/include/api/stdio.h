@@ -7,6 +7,7 @@ int open(char *pathname, int flags, mode_t mode);
 int close(int fd);
 ssize_t read(int fd, void *buffer, size_t count);
 ssize_t write(int fd, void *buffer, size_t count);
+int wipe(char *pathname);
 
 int getchar();
 int printf(char *format, ...);

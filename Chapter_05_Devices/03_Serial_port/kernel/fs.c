@@ -211,7 +211,7 @@ int k_fs_read_write(descriptor_t *desc, void *buffer, size_t size, int op)
 		kclock_gettime (CLOCK_REALTIME, &t);
 		fd->tfd->ta = t;
 
-		return size - todo;
+		return to_buffer;
 	}
 	else {
 		size_t to_buf = fd->fp % ft->block_size;
